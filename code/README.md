@@ -22,4 +22,5 @@ proof of the second theorem about semantics equivalence (reduction implies tau-t
 - [all.cfg](all.cfg):
 cfg file containing all the previous Beluga files
 
+The directory [semantics-equivalence](semantics-equivalence) contains proofs of the equivalence of early/late LTS and Honsell/Miller & Tiu LTS encodings.
 The directory [updates](updates) contains some later proof optimization for few Beluga files.

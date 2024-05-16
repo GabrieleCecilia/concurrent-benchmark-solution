@@ -1,0 +1,226 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                      Syntax                      %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Set of Channel Names
+LF names: type =
+;
+
+% Processes
+LF proc: type =
+  | p_zero: proc
+  | p_in: names → (names → proc) → proc
+  | p_out: names → names → proc → proc
+  | p_par: proc → proc → proc
+  | p_res: (names → proc) → proc
+;
+--infix p_par 11 left.
+
+% Contexts
+schema ctx = names;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%              LTS Semantics (Honsell)             %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Free Actions
+LF f_act: type =
+  | f_tau: f_act
+  | f_out: names → names → f_act
+;
+
+% Bound Actions
+LF b_act: type =
+  | b_in: names → b_act
+  | b_out: names → b_act
+;
+
+
+% (Late) Transition Relation
+LF fstep: proc → f_act → proc → type =
+  | fs_out: fstep (p_out X Y P) (f_out X Y) P
+  | fs_par1: fstep P A P' → fstep (P p_par Q) A (P' p_par Q)
+  | fs_par2: fstep Q A Q' → fstep (P p_par Q) A (P p_par Q')
+  | fs_com1: fstep P (f_out X Y) P' → bstep Q (b_in X) Q'
+    → fstep (P p_par Q) f_tau (P' p_par (Q' Y))
+  | fs_com2: bstep P (b_in X) P' → fstep Q (f_out X Y) Q'
+    → fstep (P p_par Q) f_tau ((P' Y) p_par Q')
+  | fs_res: ({z:names} fstep (P z) A (P' z))
+    → fstep (p_res P) A (p_res P')
+  | fs_close1: bstep P (b_out X) P' → bstep Q (b_in X) Q'
+    → fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+  | fs_close2: bstep P (b_in X) P' → bstep Q (b_out X) Q'
+    → fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+
+and bstep: proc → b_act → (names → proc) → type =
+  | bs_in: bstep (p_in X P) (b_in X) P
+  | bs_par1: bstep P A P'
+    → bstep (P p_par Q) A \x.((P' x) p_par Q)
+  | bs_par2: bstep Q A Q'
+    → bstep (P p_par Q) A \x.(P p_par (Q' x))
+  | bs_res: ({z:names} bstep (P z) A (P' z))
+    → bstep (p_res P) A \x.(p_res \z.(P' z x))
+  | bs_open: ({z:names} fstep (P z) (f_out X z) (P' z))
+    → bstep (p_res P) (b_out X) P'
+;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%            LTS Semantics (Miller & Tiu)          %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Actions
+LF a: type =
+  | tau: a
+  | dn : names → names → a
+  | up : names → names → a
+;
+
+
+% Transition Relation
+LF one: proc → a → proc → type =
+  | oout: one (p_out X Y P) (up X Y) P
+  | op1: one P A P1 → one (P p_par Q) A (P1 p_par Q)
+  | op2: one Q A Q1 → one (P p_par Q) A (P p_par Q1)
+  | ocomm1: oneb Q (dn X) M → one P (up X Y) R
+    → one (P p_par Q) tau (R p_par (M Y))
+  | ocomm2: oneb P (dn X) M → one Q (up X Y) T
+    → one (P p_par Q) tau ((M Y) p_par T)
+  | on: ({x:names} one (P x) A (Q x))
+    → one (p_res P) A (p_res Q)
+  | obclo1: oneb P (up X) M → oneb Q (dn X) N
+    → one (P p_par Q) tau (p_res \y.((M y) p_par (N y)))
+  | obclo2: oneb P (dn X) M → oneb Q (up X) N
+    → one (P p_par Q) tau (p_res \y.((M y) p_par (N y)))
+
+and oneb: proc → (names → a) → (names → proc) → type =
+  | obinp: oneb (p_in X M) (dn X) M
+  | obp1: oneb P A M → oneb (P p_par Q) A \x.((M x) p_par Q)
+  | obp2: oneb Q A N → oneb (P p_par Q) A \x.(P p_par (N x))
+  | obn: ({x:names} oneb (P x) A (Q x))
+    → oneb (p_res P) A \y.(p_res \x.(Q x y))
+  | oopen: ({y:names} one (M y) (up X y) (N y))
+    → oneb (p_res \x.(M x)) (up X) N
+;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%    Equivalence of Honsell and Miller Semantics   %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% First, we build a correspondence between actions in the two semantics.
+
+% Canonic function from free actions (Honsell) to actions (Miller)
+LF fact_to_act: f_act → a → type =
+  | ftau: fact_to_act f_tau tau
+  | fout: fact_to_act (f_out X Y) (up X Y) 
+;
+
+% Canonic function from bound actions (Honsell) to action abstractions (Miller)
+LF bact_to_actabs: b_act → (names → a) → type =
+  | bin: bact_to_actabs (b_in X) \y.(dn X y)
+  | bout: bact_to_actabs (b_out X) \y.(up X y)
+;
+
+% Canonic function from actions (Miller) to free actions (Honsell)
+LF act_to_fact: a → f_act → type =
+  | tauf: act_to_fact tau f_tau
+  | outf: act_to_fact (up X Y) (f_out X Y) 
+;
+
+% Canonic function from action abstractions (Miller) to bound actions (Honsell)
+LF actabs_to_bact: (names → a) → b_act → type =
+  | inb: actabs_to_bact (\y.(dn X y)) (b_in X)
+  | outb: actabs_to_bact (\y.(up X y)) (b_out X)
+;
+
+
+% Next, we prove the equivalence between transitions of the two semantics.
+
+% First Theorem: for any transition in Honsell semantics
+% there exists a canonic transition in Miller semantics
+rec free_htom: (g:ctx) [g ⊢ fstep P A Q] → [g ⊢ fact_to_act A A']
+  → [g ⊢ one P A' Q] =
+/ total f (free_htom _ _ _ _ _ f _) /
+fn f ⇒ fn c ⇒ case f of
+  | [g ⊢ fs_out] ⇒ let [g ⊢ fout] = c in [g ⊢ oout]
+  | [g ⊢ fs_par1 F1] ⇒
+    let [g ⊢ O1] = free_htom [g ⊢ F1] c in [g ⊢ op1 O1]
+  | [g ⊢ fs_par2 F2] ⇒
+    let [g ⊢ O2] = free_htom [g ⊢ F2] c in [g ⊢ op2 O2]
+  | [g ⊢ fs_com1 F1 B2] ⇒ let [g ⊢ ftau] = c in
+    let [g ⊢ O1] = free_htom [g ⊢ F1] [g ⊢ fout] in
+    let [g ⊢ OB2] = bound_htom [g ⊢ B2] [g ⊢ bin] in [g ⊢ ocomm1 OB2 O1]
+  | [g ⊢ fs_com2 B1 F2] ⇒ let [g ⊢ ftau] = c in
+    let [g ⊢ OB1] = bound_htom [g ⊢ B1] [g ⊢ bin] in
+    let [g ⊢ O2] = free_htom [g ⊢ F2] [g ⊢ fout] in [g ⊢ ocomm2 OB1 O2]
+  | [g ⊢ fs_res \x.F[..,x]] ⇒ let [g ⊢ C] = c in
+    let [g,x:names ⊢ O[..,x]] = free_htom [g,x:names ⊢ F] [g,x:names ⊢ C[..]]
+    in [g ⊢ on \x.O[..,x]]
+  | [g ⊢ fs_close1 B1 B2] ⇒ let [g ⊢ ftau] = c in
+    let [g ⊢ OB1] = bound_htom [g ⊢ B1] [g ⊢ bout] in
+    let [g ⊢ OB2] = bound_htom [g ⊢ B2] [g ⊢ bin] in [g ⊢ obclo1 OB1 OB2]
+  | [g ⊢ fs_close2 B1 B2] ⇒ let [g ⊢ ftau] = c in
+    let [g ⊢ OB1] = bound_htom [g ⊢ B1] [g ⊢ bin] in
+    let [g ⊢ OB2] = bound_htom [g ⊢ B2] [g ⊢ bout] in [g ⊢ obclo2 OB1 OB2]
+
+and rec bound_htom: (g:ctx) [g ⊢ bstep P A \x.Q[..,x]]
+  → [g ⊢ bact_to_actabs A \x.A'[..,x]] → [g ⊢ oneb P (\x.A'[..,x]) (\x.Q[..,x])] =
+/ total b (bound_htom _ _ _ _ _ b _) /
+fn b ⇒ fn c ⇒ case b of
+  | [g ⊢ bs_in] ⇒ let [g ⊢ bin] = c in [g ⊢ obinp]
+  | [g ⊢ bs_par1 B1] ⇒
+    let [g ⊢ OB1] = bound_htom [g ⊢ B1] c in [g ⊢ obp1 OB1]
+  | [g ⊢ bs_par2 B2] ⇒
+    let [g ⊢ OB2] = bound_htom [g ⊢ B2] c in [g ⊢ obp2 OB2]
+  | [g ⊢ bs_res \x.B[..,x]] ⇒ let [g ⊢ C] = c in
+    let [g,x:names ⊢ OB[..,x]] = bound_htom [g,x:names ⊢ B] [g,x:names ⊢ C[..]]
+    in [g ⊢ obn \x.OB[..,x]]
+  | [g ⊢ bs_open \x.F[..,x]] ⇒ let [g ⊢ bout] = c in
+    let [g,x:names ⊢ O[..,x]] = free_htom [g,x:names ⊢ F] [g,x:names ⊢ fout]
+    in [g ⊢ oopen \x.O[..,x]]
+;  
+
+
+% Second Theorem: for any transition in Miller semantics
+% there exists a canonic transition in Honsell semantics
+rec free_mtoh: (g:ctx) [g ⊢ one P A Q] → [g ⊢ act_to_fact A A']
+  → [g ⊢ fstep P A' Q] =
+/ total o (free_mtoh _ _ _ _ _ o _) /
+fn o ⇒ fn c ⇒ case o of
+  | [g ⊢ oout] ⇒ let [g ⊢ outf] = c in [g ⊢ fs_out]
+  | [g ⊢ op1 O1] ⇒
+    let [g ⊢ F1] = free_mtoh [g ⊢ O1] c in [g ⊢ fs_par1 F1]
+  | [g ⊢ op2 O2] ⇒
+    let [g ⊢ F2] = free_mtoh [g ⊢ O2] c in [g ⊢ fs_par2 F2]
+  | [g ⊢ ocomm1 OB1 O2] ⇒ let [g ⊢ tauf] = c in
+    let [g ⊢ B1] = bound_mtoh [g ⊢ OB1] [g ⊢ inb] in
+    let [g ⊢ F2] = free_mtoh [g ⊢ O2] [g ⊢ outf] in [g ⊢ fs_com1 F2 B1]
+  | [g ⊢ ocomm2 OB1 O2] ⇒ let [g ⊢ tauf] = c in
+    let [g ⊢ B1] = bound_mtoh [g ⊢ OB1] [g ⊢ inb] in
+    let [g ⊢ F2] = free_mtoh [g ⊢ O2] [g ⊢ outf] in [g ⊢ fs_com2 B1 F2]
+  | [g ⊢ on \x.O[..,x]] ⇒ let [g ⊢ C] = c in
+    let [g,x:names ⊢ F[..,x]] = free_mtoh [g,x:names ⊢ O] [g,x:names ⊢ C[..]]
+    in [g ⊢ fs_res \x.F[..,x]]
+  | [g ⊢ obclo1 OB1 OB2] ⇒ let [g ⊢ tauf] = c in
+    let [g ⊢ B1] = bound_mtoh [g ⊢ OB1] [g ⊢ outb] in
+    let [g ⊢ B2] = bound_mtoh [g ⊢ OB2] [g ⊢ inb] in [g ⊢ fs_close1 B1 B2]
+  | [g ⊢ obclo2 OB1 OB2] ⇒ let [g ⊢ tauf] = c in
+    let [g ⊢ B1] = bound_mtoh [g ⊢ OB1] [g ⊢ inb] in
+    let [g ⊢ B2] = bound_mtoh [g ⊢ OB2] [g ⊢ outb] in [g ⊢ fs_close2 B1 B2]
+
+
+and rec bound_mtoh: (g:ctx) [g ⊢ oneb P (\x.A[..,x]) (\x.Q[..,x])]
+  → [g ⊢ actabs_to_bact (\x.A[..,x]) A'] → [g ⊢ bstep P A' \x.Q[..,x]] =
+/ total ob (bound_mtoh _ _ _ _ _ ob _) /
+fn ob ⇒ fn c ⇒ case ob of
+  | [g ⊢ obinp] ⇒ let [g ⊢ inb] = c in [g ⊢ bs_in]
+  | [g ⊢ obp1 OB1] ⇒
+    let [g ⊢ B1] = bound_mtoh [g ⊢ OB1] c in [g ⊢ bs_par1 B1]
+  | [g ⊢ obp2 OB2] ⇒
+    let [g ⊢ B2] = bound_mtoh [g ⊢ OB2] c in [g ⊢ bs_par2 B2]
+  | [g ⊢ obn \x.OB[..,x]] ⇒ let [g ⊢ C] = c in
+    let [g,x:names ⊢ B[..,x]] = bound_mtoh [g,x:names ⊢ OB] [g,x:names ⊢ C[..]]
+    in [g ⊢ bs_res \x.B[..,x]]
+  | [g ⊢ oopen \x.O[..,x]] ⇒ let [g ⊢ outb] = c in
+    let [g,x:names ⊢ F[..,x]] = free_mtoh [g, x:names ⊢ O] [g,x:names ⊢ outf]
+    in [g ⊢ bs_open \x.F[..,x]]
+;

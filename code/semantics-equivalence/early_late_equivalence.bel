@@ -1,0 +1,324 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                      Syntax                      %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Set of Channel Names
+LF names: type =
+;
+
+% Processes
+LF proc: type =
+  | p_zero: proc
+  | p_in: names → (names → proc) → proc
+  | p_out: names → names → proc → proc
+  | p_par: proc → proc → proc
+  | p_res: (names → proc) → proc
+;
+--infix p_par 11 left.
+
+% Contexts
+schema ctx = names;
+
+% Equality of Processes
+LF eqp: proc → proc → type =
+  | prefl: eqp P P
+;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                     Semantics                    %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Free Actions
+LF f_act: type =
+  | f_in: names → names → f_act
+  | f_out: names → names → f_act
+  | f_tau: f_act
+;
+
+% Bound Actions
+LF b_act: type =
+  | b_in: names → b_act
+  | b_out: names → b_act
+;
+
+
+% Early Transition Relation
+LF early_fstep: proc → f_act → proc → type =
+  | efs_in: early_fstep (p_in X P) (f_in X Y) (P Y)
+  | efs_out: early_fstep (p_out X Y P) (f_out X Y) P
+  | efs_par1: early_fstep P A P' → early_fstep (P p_par Q) A (P' p_par Q)
+  | efs_par2: early_fstep Q A Q' → early_fstep (P p_par Q) A (P p_par Q')
+  | efs_com1: early_fstep P (f_out X Y) P' → early_fstep Q (f_in X Y) Q'
+    → early_fstep (P p_par Q) f_tau (P' p_par Q')
+  | efs_com2: early_fstep P (f_in X Y) P' → early_fstep Q (f_out X Y) Q'
+    → early_fstep (P p_par Q) f_tau (P' p_par Q')
+  | efs_res: ({z:names} early_fstep (P z) A (P' z))
+    → early_fstep (p_res P) A (p_res P')
+  | efs_close1: early_bstep P (b_out X) P' → early_bstep Q (b_in X) Q'
+    → early_fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+  | efs_close2: early_bstep P (b_in X) P' → early_bstep Q (b_out X) Q'
+    → early_fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+
+and early_bstep: proc → b_act → (names → proc) → type =
+  | ebs_in: early_bstep (p_in X P) (b_in X) P
+  | ebs_par1: early_bstep P A P'
+    → early_bstep (P p_par Q) A \x.((P' x) p_par Q)
+  | ebs_par2: early_bstep Q A Q'
+    → early_bstep (P p_par Q) A \x.(P p_par (Q' x))
+  | ebs_res: ({z:names} early_bstep (P z) A (P' z))
+    → early_bstep (p_res P) A \x.(p_res \z.(P' z x))
+  | ebs_open: ({z:names} early_fstep (P z) (f_out X z) (P' z))
+    → early_bstep (p_res P) (b_out X) P'
+;
+
+
+% Late Transition Relation
+LF late_fstep: proc → f_act → proc → type =
+  | lfs_out: late_fstep (p_out X Y P) (f_out X Y) P
+  | lfs_par1: late_fstep P A P' → late_fstep (P p_par Q) A (P' p_par Q)
+  | lfs_par2: late_fstep Q A Q' → late_fstep (P p_par Q) A (P p_par Q')
+  | lfs_com1: late_fstep P (f_out X Y) P' → late_bstep Q (b_in X) Q'
+    → late_fstep (P p_par Q) f_tau (P' p_par (Q' Y))
+  | lfs_com2: late_bstep P (b_in X) P' → late_fstep Q (f_out X Y) Q'
+    → late_fstep (P p_par Q) f_tau ((P' Y) p_par Q')
+  | lfs_res: ({z:names} late_fstep (P z) A (P' z))
+    → late_fstep (p_res P) A (p_res P')
+  | lfs_close1: late_bstep P (b_out X) P' → late_bstep Q (b_in X) Q'
+    → late_fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+  | lfs_close2: late_bstep P (b_in X) P' → late_bstep Q (b_out X) Q'
+    → late_fstep (P p_par Q) f_tau (p_res \z.((P' z) p_par (Q' z)))
+
+and late_bstep: proc → b_act → (names → proc) → type =
+  | lbs_in: late_bstep (p_in X P) (b_in X) P
+  | lbs_par1: late_bstep P A P'
+    → late_bstep (P p_par Q) A \x.((P' x) p_par Q)
+  | lbs_par2: late_bstep Q A Q'
+    → late_bstep (P p_par Q) A \x.(P p_par (Q' x))
+  | lbs_res: ({z:names} late_bstep (P z) A (P' z))
+    → late_bstep (p_res P) A \x.(p_res \z.(P' z x))
+  | lbs_open: ({z:names} late_fstep (P z) (f_out X z) (P' z))
+    → late_bstep (p_res P) (b_out X) P'
+;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Equivalence between Early and Late LTS Semantics %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% A preliminary result is the following correspondence between free input
+% transitions in the early semantics and input transitions in the late semantics:
+% early_fstep P (f_in X Y) Q holds iff there exists a process Q' such that
+% late_bstep P (b_in X) Q' holds and (Q' Y) is equal to Q.
+% In order to encode the existential present in this correspondence,
+% we define the following type family ex_latebs:
+
+LF ex_latebs: proc → names → names → proc → type =
+  | lbs: late_bstep P (b_in X) \w.(Q' w) → eqp Q (Q' Y) → ex_latebs P X Y Q
+;
+
+
+% We now prove that each early input/output transition
+% corresponds to a late input/output transition.
+
+%%% 1st Correspondence: Free Input %%%
+
+% Early Free Input --> Late Input
+rec finp_earlytolate: (g:ctx) [g ⊢ early_fstep P (f_in X Y) Q]
+  → [g ⊢ ex_latebs P X Y Q] =
+/ total e (finp_earlytolate _ _ _ _ _ e) /
+fn e ⇒ case e of
+  | [g ⊢ efs_in] ⇒ [g ⊢ lbs lbs_in prefl]
+  | [g ⊢ efs_par1 FE1] ⇒
+    let [g ⊢ lbs BL1 prefl] = finp_earlytolate [g ⊢ FE1] in
+    [g ⊢ lbs (lbs_par1 BL1) prefl]
+  | [g ⊢ efs_par2 FE2] ⇒
+    let [g ⊢ lbs BL2 prefl] = finp_earlytolate [g ⊢ FE2] in
+    [g ⊢ lbs (lbs_par2 BL2) prefl]
+  | [g ⊢ efs_res \x.FE1[..,x]] ⇒ let [g,x:names ⊢ lbs BL1[..,x] prefl]
+    = finp_earlytolate [g,x:names ⊢ FE1[..,x]] in
+    [g ⊢ lbs (lbs_res \x.BL1[..,x]) prefl]
+;
+
+% Late Input --> Early Free Input
+rec finp_latetoearly: (g:ctx) {Y:[g ⊢ names]} [g ⊢ ex_latebs P X Y Q]
+  → [g ⊢ early_fstep P (f_in X Y) Q] =
+/ total p (finp_latetoearly _ _ p _ _ _) /
+mlam Y ⇒ fn l ⇒ let [g ⊢ lbs L prefl] = l in
+case [g ⊢ L] of 
+  | [g ⊢ lbs_in] ⇒ [g ⊢ efs_in]
+  | [g ⊢ lbs_par1 BL1] ⇒ let [g ⊢ FE1] =
+    finp_latetoearly [g ⊢ Y] [g ⊢ lbs BL1 prefl] in [g ⊢ efs_par1 FE1]
+  | [g ⊢ lbs_par2 BL2] ⇒ let [g ⊢ FE2] =
+    finp_latetoearly [g ⊢ Y] [g ⊢ lbs BL2 prefl] in [g ⊢ efs_par2 FE2]
+  | [g ⊢ lbs_res \x.BL1[..,x]] ⇒
+    let [g,x:names ⊢ FE1[..,x]] = finp_latetoearly [g,x:names ⊢ Y[..]]
+    [g,x:names ⊢ lbs (BL1[..,x]) prefl] in [g ⊢ efs_res \x.FE1[..,x]]
+;
+
+%%% 2nd Correspondence: Free Output %%%
+
+% Early Free Output --> Late Free Output
+rec fout_earlytolate: (g:ctx) [g ⊢ early_fstep P (f_out X Y) Q]
+  → [g ⊢ late_fstep P (f_out X Y) Q] =
+/ total e (fout_earlytolate _ _ _ _ _ e) /
+fn e ⇒ case e of
+  | [g ⊢ efs_out] ⇒ [g ⊢ lfs_out]
+  | [g ⊢ efs_par1 FE1] ⇒
+    let [g ⊢ FL1] = fout_earlytolate [g ⊢ FE1] in [g ⊢ lfs_par1 FL1]
+  | [g ⊢ efs_par2 FE2] ⇒
+    let [g ⊢ FL2] = fout_earlytolate [g ⊢ FE2] in [g ⊢ lfs_par2 FL2]
+  | [g ⊢ efs_res \x.FE1[..,x]] ⇒
+    let [g,x:names ⊢ FL1[..,x]] = fout_earlytolate[g,x:names ⊢ FE1[..,x]]
+    in [g ⊢ lfs_res \x.FL1[..,x]]    
+;
+
+% Late Free Output --> Early Free Output
+rec fout_latetoearly: (g:ctx) [g ⊢ late_fstep P (f_out X Y) Q]
+  → [g ⊢ early_fstep P (f_out X Y) Q] =
+/ total l (fout_latetoearly _ _ _ _ _ l) /
+fn l ⇒ case l of
+  | [g ⊢ lfs_out] ⇒ [g ⊢ efs_out]
+  | [g ⊢ lfs_par1 FL1] ⇒
+    let [g ⊢ FE1] = fout_latetoearly [g ⊢ FL1] in [g ⊢ efs_par1 FE1]
+  | [g ⊢ lfs_par2 FL2] ⇒
+    let [g ⊢ FE2] = fout_latetoearly [g ⊢ FL2] in [g ⊢ efs_par2 FE2]
+  | [g ⊢ lfs_res \x.FL1[..,x]] ⇒
+    let [g,x:names ⊢ FE1[..,x]] = fout_latetoearly[g,x:names ⊢ FL1[..,x]]
+    in [g ⊢ efs_res \x.FE1[..,x]]    
+;
+
+%%% 3rd Correspondence: Bound Input %%%
+
+% Early Bound Input --> Late Input
+rec binp_earlytolate: (g:ctx) [g ⊢ early_bstep P (b_in X) \x.Q[..,x]]
+  → [g ⊢ late_bstep P (b_in X) \x.Q[..,x]] =
+/ total e (binp_earlytolate _ _ _ _ e) /
+fn e ⇒ case e of
+  | [g ⊢ ebs_in] ⇒ [g ⊢ lbs_in]
+  | [g ⊢ ebs_par1 EB1] ⇒
+    let [g ⊢ LB1] = binp_earlytolate [g ⊢ EB1] in [g ⊢ lbs_par1 LB1]
+  | [g ⊢ ebs_par2 EB2] ⇒
+    let [g ⊢ LB2] = binp_earlytolate [g ⊢ EB2] in [g ⊢ lbs_par2 LB2]
+  | [g ⊢ ebs_res \x.EB1[..,x]] ⇒
+    let [g,x:names ⊢ LB1[..,x]] = binp_earlytolate [g, x:names ⊢ EB1[..,x]]
+    in [g ⊢ lbs_res \x.LB1[..,x]]
+;
+
+% Late Input --> Early Bound Input
+rec binp_latetoearly: (g:ctx) [g ⊢ late_bstep P (b_in X) \x.Q[..,x]]
+  → [g ⊢ early_bstep P (b_in X) \x.Q[..,x]] =
+/ total l (binp_latetoearly _ _ _ _ l) /
+fn l ⇒ case l of
+  | [g ⊢ lbs_in] ⇒ [g ⊢ ebs_in]
+  | [g ⊢ lbs_par1 BL1] ⇒
+    let [g ⊢ BE1] = binp_latetoearly [g ⊢ BL1] in [g ⊢ ebs_par1 BE1]
+  | [g ⊢ lbs_par2 BL2] ⇒
+    let [g ⊢ BE2] = binp_latetoearly [g ⊢ BL2] in [g ⊢ ebs_par2 BE2]
+  | [g ⊢ lbs_res \x.BL1[..,x]] ⇒
+    let [g,x:names ⊢ BE1[..,x]] = binp_latetoearly [g,x:names ⊢ BL1[..,x]]
+    in [g ⊢ ebs_res \x.BE1[..,x]]
+;
+
+%%% 4th Correspondence: Bound Output %%%
+
+% Early Bound Output --> Late Bound Output
+rec bout_earlytolate: (g:ctx) [g ⊢ early_bstep P (b_out X) \x.Q[..,x]]
+  → [g ⊢ late_bstep P (b_out X) \x.Q[..,x]] =
+/ total e (bout_earlytolate _ _ _ _ e) /
+fn e ⇒ case e of
+  | [g ⊢ ebs_open \x.FE1[..,x]] ⇒
+    let [g,x:names ⊢ FL1[..,x]] = fout_earlytolate [g,x:names ⊢ FE1[..,x]]
+    in [g ⊢ lbs_open \x.FL1[..,x]] 
+  | [g ⊢ ebs_par1 BE1] ⇒
+    let [g ⊢ BL1] = bout_earlytolate [g ⊢ BE1] in [g ⊢ lbs_par1 BL1]
+  | [g ⊢ ebs_par2 BE2] ⇒
+    let [g ⊢ BL2] = bout_earlytolate [g ⊢ BE2] in [g ⊢ lbs_par2 BL2]
+  | [g ⊢ ebs_res \x.BE1[..,x]] ⇒
+    let [g,x:names ⊢ BL1[..,x]] = bout_earlytolate [g,x:names ⊢ BE1[..,x]]
+    in [g ⊢ lbs_res \x.BL1[..,x]]
+;
+
+% Late Bound Output --> Early Bound Output
+rec bout_latetoearly: (g:ctx) [g ⊢ late_bstep P (b_out X) \x.Q[..,x]]
+  → [g ⊢ early_bstep P (b_out X) \x.Q[..,x]] =
+/ total l (bout_latetoearly _ _ _ _ l) /
+fn l ⇒ case l of
+  | [g ⊢ lbs_open \x.FL1[..,x]] ⇒
+    let [g,x:names ⊢ FE1[..,x]] = fout_latetoearly [g,x:names ⊢ FL1[..,x]]
+    in [g ⊢ ebs_open \x.FE1[..,x]] 
+  | [g ⊢ lbs_par1 BL1] ⇒
+    let [g ⊢ BE1] = bout_latetoearly [g ⊢ BL1] in [g ⊢ ebs_par1 BE1]
+  | [g ⊢ lbs_par2 BL2] ⇒
+    let [g ⊢ BE2] = bout_latetoearly [g ⊢ BL2] in [g ⊢ ebs_par2 BE2]
+  | [g ⊢ lbs_res \x.BL1[..,x]] ⇒
+    let [g,x:names ⊢ BE1[..,x]] = bout_latetoearly [g,x:names ⊢ BL1[..,x]]
+    in [g ⊢ ebs_res \x.BE1[..,x]]
+;
+
+
+
+% We are ready to prove the theorems stating the equivalence of early and late semantics.
+
+% First Theorem: for any tau-transition in the early semantics
+% there is a corresponding tau-transition in the late semantics.
+rec tau_earlytolate: (g:ctx) [g ⊢ early_fstep P f_tau Q]
+  → [g ⊢ late_fstep P f_tau Q] =
+/ total e (tau_earlytolate _ _ _ e) /
+fn e ⇒ case e of
+  | [g ⊢ efs_par1 FE1] ⇒
+    let [g ⊢ FL1] = tau_earlytolate [g ⊢ FE1] in [g ⊢ lfs_par1 FL1]
+  | [g ⊢ efs_par2 FE2] ⇒
+    let [g ⊢ FL2] = tau_earlytolate [g ⊢ FE2] in [g ⊢ lfs_par2 FL2]
+  | [g ⊢ efs_com1 FE1 FE2] ⇒
+    let [g ⊢ FL1] = fout_earlytolate [g ⊢ FE1] in
+    let [g ⊢ lbs BL2 prefl] = finp_earlytolate [g ⊢ FE2] in
+    [g ⊢ lfs_com1 FL1 BL2]
+  | [g ⊢ efs_com2 FE1 FE2] ⇒
+    let [g ⊢ lbs BL1 prefl] = finp_earlytolate [g ⊢ FE1] in
+    let [g ⊢ FL2] = fout_earlytolate [g ⊢ FE2] in
+    [g ⊢ lfs_com2 BL1 FL2]
+  | [g ⊢ efs_res \x.FE1[..,x]] ⇒
+    let [g,x:names ⊢ FL1[..,x]] = tau_earlytolate [g,x:names ⊢ FE1[..,x]]
+    in [g ⊢ lfs_res \x.FL1[..,x]]
+  | [g ⊢ efs_close1 BE1 BE2] ⇒
+    let [g ⊢ BL1] = bout_earlytolate [g ⊢ BE1] in
+    let [g ⊢ BL2] = binp_earlytolate [g ⊢ BE2] in
+    [g ⊢ lfs_close1 BL1 BL2]
+  | [g ⊢ efs_close2 BE1 BE2] ⇒
+    let [g ⊢ BL1] = binp_earlytolate [g ⊢ BE1] in
+    let [g ⊢ BL2] = bout_earlytolate [g ⊢ BE2] in
+    [g ⊢ lfs_close2 BL1 BL2]
+;
+
+% Second Theorem: for any tau-transition in the late semantics
+% there is a corresponding tau-transition in the early semantics.
+rec tau_latetoearly: (g:ctx) [g ⊢ late_fstep P f_tau Q]
+  → [g ⊢ early_fstep P f_tau Q] =
+/ total l (tau_latetoearly _ _ _ l) /
+fn l ⇒ case l of
+  | [g ⊢ lfs_par1 FL1] ⇒
+    let [g ⊢ FE1] = tau_latetoearly [g ⊢ FL1] in [g ⊢ efs_par1 FE1]
+  | [g ⊢ lfs_par2 FL2] ⇒
+    let [g ⊢ FE2] = tau_latetoearly [g ⊢ FL2] in [g ⊢ efs_par2 FE2]
+  | [g ⊢ lfs_com1 FL1 BL2] ⇒
+    let [g ⊢ FE1]:[g ⊢ early_fstep P1 (f_out X Y) Q1] =
+    fout_latetoearly [g ⊢ FL1] in
+    let [g ⊢ FE2] = finp_latetoearly [g ⊢ Y] [g ⊢ lbs BL2 prefl] in
+    [g ⊢ efs_com1 FE1 FE2]
+  | [g ⊢ lfs_com2 BL1 FL2] ⇒
+    let [g ⊢ FE2]:[g ⊢ early_fstep P2 (f_out X Y) Q2] =
+    fout_latetoearly [g ⊢ FL2] in
+    let [g ⊢ FE1] = finp_latetoearly [g ⊢ Y] [g ⊢ lbs BL1 prefl] in
+    [g ⊢ efs_com2 FE1 FE2]
+  | [g ⊢ lfs_res \x.FL1[..,x]] ⇒
+    let [g,x:names ⊢ FE1[..,x]] = tau_latetoearly
+    [g,x:names ⊢ FL1[..,x]] in [g ⊢ efs_res \x.FE1[..,x]]
+  | [g ⊢ lfs_close1 BL1 BL2] ⇒
+    let [g ⊢ BE1] = bout_latetoearly [g ⊢ BL1] in
+    let [g ⊢ BE2] = binp_latetoearly [g ⊢ BL2] in
+    [g ⊢ efs_close1 BE1 BE2]
+  | [g ⊢ lfs_close2 BL1 BL2] ⇒
+    let [g ⊢ BE1] = binp_latetoearly [g ⊢ BL1] in
+    let [g ⊢ BE2] = bout_latetoearly [g ⊢ BL2] in
+    [g ⊢ efs_close2 BE1 BE2]
+;
