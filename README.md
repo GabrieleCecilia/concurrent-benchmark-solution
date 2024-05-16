@@ -1,24 +1,4 @@
 # concurrent-benchmark-solution
-A solution to the 2nd challenge of the Concurrent Calculi Formalisation Benchmark in the proof assistant Beluga, by Alberto Momigliano and Gabriele Cecilia
+The Concurrent Calculi Formalisation Benchmark is a set of challenges which address problems typically encountered during the mechanization of models of concurrent and distributed programming languages: see [concurrentbenchmark.github.io](https://concurrentbenchmark.github.io/) for a thorough description of the challenge problems and a collection of their submitted solutions. In particular, the second challenge involves reasoning about scope extrusion, i.e. the fact that a process can send a restricted name to another process, provided that the restriction is expanded to include the receiving process.
 
-Code:
-- 1_definitions.bel:
-formalization of syntax and semantics (reduction, LTS) of the pi-calculus
-
-- 2_input_rewriting.bel, 3_free_output_rewriting.bel, 4_bound_output_rewriting.bel:
-lemmas about rewriting (up to structural congruence) of processes involved in input/free output/bound output transitions
-
-- 5_theorem1.bel:
-proof of the first theorem about semantics equivalence (tau-transition implies reduction)
-
-- 6_stepcong_lemma.bel:
-lemma stating that, given two congruent processes P and Q and a transition from P to P', then Q makes a transition through the same action to some process Q' congruent to P'. This file also contains a technical strengthening lemma necessary for this proof.
-
-- 7_reduction_rewriting.bel:
-lemma about rewriting (up to structural congruence) of processes involved in a reduction
-
-- 8_theorem2.bel:
-proof of the second theorem about semantics equivalence (reduction implies tau-transition, up to congruence)
-
-- all.cfg:
-cfg file containing all the previous Beluga files
+This repository contains a solution to the second challenge of the Benchmark in the proof assistant Beluga, by Alberto Momigliano and Gabriele Cecilia. The Beluga sources can be found in directory [code](code). The file [thesis](thesis.pdf) is a Master's thesis by Gabriele Cecilia providing a detailed informal and formal explanation of this work.
