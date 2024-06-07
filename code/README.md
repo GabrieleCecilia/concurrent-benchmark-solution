@@ -1,4 +1,5 @@
-# concurrent-benchmark-solution/code
+# Code
+The code is type-checked with Beluga version 1.1.1.
 The solution consists of the following files:
 
 - [1_definitions.bel](1_definitions.bel):
