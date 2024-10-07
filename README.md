@@ -7,7 +7,9 @@ This repository contains the [Beluga](https://complogic.cs.mcgill.ca/beluga/) so
 
 ## Install and usage instructions
 This mechanization is compatible with Beluga version 1.1.1.
+
 For installation, please refer to the [installation guide](https://github.com/Beluga-lang/Beluga/blob/master/INSTALL) in the GitHub repository of Beluga.
+
 Once Beluga is installed, you can type-check the project by running it on the file `all.cfg`. The following is the expected output:
 
 ```
